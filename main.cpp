@@ -227,15 +227,18 @@ void main_application(void)
     mbedClient.get_cloud_client().on_certificate_renewal(certificate_renewal_cb);
 #endif // MBED_CONF_MBED_CLOUD_CLIENT_DISABLE_CERTIFICATE_ENROLLMENT
 
-
     // Check if client is registering or registered, if true sleep and repeat.
-
     while (mbedClient.is_register_called()) {
         static int button_count = 0;
+#ifdef USE_BUTTON
         mcc_platform_do_wait(100);
         if (mcc_platform_button_clicked()) {
             button_res->set_value(++button_count);
         }
+#else
+        mcc_platform_do_wait(5000);
+        button_res->set_value(++button_count);
+#endif
     }
 
     // Client unregistered, disconnect and exit program.
