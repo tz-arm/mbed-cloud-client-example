@@ -180,6 +180,8 @@ void unregister(void)
     client->close();
 }
 
+#include "mbed_application_shield.h"
+
 void main_application(void)
 {
 #if defined(__linux__) && (MBED_CONF_MBED_TRACE_ENABLE == 0)
@@ -193,6 +195,10 @@ void main_application(void)
         printf("Failed initializing mbed trace\r\n" );
         return;
     }
+
+    mbed_app_function_test();
+
+    while(1)thread_sleep_for(1000);
 
     // Initialize storage
     if (mcc_platform_storage_init() != 0) {
