@@ -16,8 +16,8 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------
 
-#ifndef __MBED_APPLICATION_SHIELD_H__
-#define __MBED_APPLICATION_SHIELD_H__
+#ifndef __MBED_APP_COMPONENT_H__
+#define __MBED_APP_COMPONENT_H__
 
 #include "mbed.h"
 #include "C12832.h"
@@ -39,29 +39,17 @@
 #define MBED_CONF_APP_PINNAME_SDA       D14
 #define MBED_CONF_APP_PINNAME_SCL       D15
 
+#define MBED_CONF_APP_PINNAME_LED_R     D5
+#define MBED_CONF_APP_PINNAME_LED_G     D8
+#define MBED_CONF_APP_PINNAME_LED_B     D9
 
-void mbed_app_function_test();
+void mbed_app_driver_test();
 
-#if 0 //TBD
-class MbedAppShiled
-{
-    typedef enum {
-        STATE_IDLE,
-        STATE_STARTED,
-    } BlinkyState;
+float mbed_app_get_temperature();
+float mbed_app_get_current();
+float mbed_app_get_voltage();
 
-public:
-    MbedAppShiled();
+void mbed_app_lcd_init();
+void mbed_app_lcd_fresh(float tmp, float vol, float cur, float pwr);
 
-    ~MbedAppShiled();
-
-    void init();
-    bool start();
-    void stop();
-
-private:
-
-};
-#endif
-
-#endif  //__MBED_APPLICATION_SHIELD_H__
+#endif  //__MBED_APP_COMPONENT_H__
