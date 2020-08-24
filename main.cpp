@@ -49,6 +49,10 @@
 #include "nanostack-event-loop/eventOS_scheduler.h"
 #endif
 
+#if defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
+#include "wisun_smart_meter.h"
+#endif
+
 // event based LED blinker, controlled via pattern_resource
 #ifndef MCC_MEMORY
 static Blinky blinky;
@@ -180,8 +184,6 @@ void unregister(void)
     client->close();
 }
 
-#include "mbed_application_shield.h"
-
 void main_application(void)
 {
 #if defined(__linux__) && (MBED_CONF_MBED_TRACE_ENABLE == 0)
@@ -196,10 +198,6 @@ void main_application(void)
         return;
     }
 
-    mbed_app_function_test();
-
-    while(1)thread_sleep_for(1000);
-
     // Initialize storage
     if (mcc_platform_storage_init() != 0) {
         printf("Failed to initialize storage\r\n" );
@@ -211,6 +209,10 @@ void main_application(void)
         printf("ERROR - platform_init() failed!\r\n");
         return;
     }
+
+#if defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
+    wisun_smart_meter_init_display();
+#endif
 
     // Print some statistics of the object sizes and their heap memory consumption.
     // NOTE: This *must* be done before creating MbedCloudClient, as the statistic calculation
@@ -304,6 +306,17 @@ void main_application(void)
 
 #endif
 
+#if defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
+    wisun_smart_meter_init_client(mbedClient);
+
+    //wisun_smart_meter_start();
+
+    //while (1)
+    //{
+    //    mcc_platform_do_wait(1000);
+    //}
+#endif
+
 // For high-latency networks with limited total bandwidth combined with large number
 // of endpoints, it helps to stabilize the network when Device Management Client has
 // delayed registration to Device Management after the network formation.
@@ -320,6 +333,7 @@ void main_application(void)
     blinky.request_automatic_increment_event();
 #endif
 
+    printf("Starting mbed eventloop...1\r\n");
 
 #ifndef MBED_CONF_MBED_CLOUD_CLIENT_DISABLE_CERTIFICATE_ENROLLMENT
     // Add certificate renewal callback
@@ -330,14 +344,26 @@ void main_application(void)
  (MBED_CONF_NANOSTACK_HAL_EVENT_LOOP_USE_MBED_EVENTS == 1) && \
  defined(MBED_CONF_EVENTS_SHARED_DISPATCH_FROM_APPLICATION) && \
  (MBED_CONF_EVENTS_SHARED_DISPATCH_FROM_APPLICATION == 1)
-    printf("Starting mbed eventloop...\r\n");
+    printf("Starting mbed eventloop...\2r\n");
 
     eventOS_scheduler_mutex_wait();
 
     EventQueue *queue = mbed::mbed_event_queue();
     queue->dispatch_forever();
-#else
+#elif defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
+    printf("Starting mbed eventloop...\3r\n");
+    while(!mbedClient.is_client_registered())
+    {
+        mcc_platform_do_wait(1000);
+    }
 
+    wisun_smart_meter_start();
+
+    while (1)
+    {
+        mcc_platform_do_wait(1000);
+    }
+#else
     // Check if client is registering or registered, if true sleep and repeat.
     while (mbedClient.is_register_called()) {
         mcc_platform_do_wait(100);

@@ -5,6 +5,11 @@
         "MBED_CLOUD_CLIENT_USER_CONFIG_FILE=\"mbed_cloud_client_user_config.h\""
     ],
      "config": {
+        "platform-wisun-smart-meter": {
+            "help": "Enable the demo of wisun smart meter",
+            "macro_name": "PLATFORM_WISUN_SMART_METER",
+            "value": 1
+        },
         "platform-enable-button": {
             "help": "Enable button usage on the board.",
             "macro_name": "PLATFORM_ENABLE_BUTTON",

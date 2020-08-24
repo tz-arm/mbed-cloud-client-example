@@ -18,12 +18,11 @@
 
 #include "mbed_app_component.h"
 
-//#define TEST
-
-#if 1
+#if defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
 
 //Using Arduino pin notation
 //C12832(PinName mosi, PinName sck, PinName reset, PinName a0, PinName ncs, const char* name = "LCD");
+
 C12832 lcd(MBED_CONF_APP_PINNAME_LCD_MOSI, 
             MBED_CONF_APP_PINNAME_LCD_MISO, 
             MBED_CONF_APP_PINNAME_LCD_SCK, 
@@ -31,23 +30,23 @@ C12832 lcd(MBED_CONF_APP_PINNAME_LCD_MOSI,
             MBED_CONF_APP_PINNAME_LCD_A0, 
             MBED_CONF_APP_PINNAME_LCD_NCS);
 
-#ifdef TEST
+
 AnalogIn pot1(MBED_CONF_APP_PINNAME_POT1);
 AnalogIn pot2(MBED_CONF_APP_PINNAME_POT2);
 
 DigitalIn fire(MBED_CONF_APP_PINNAME_JOYSTICK_FIRE);
 PwmOut speaker(MBED_CONF_APP_PINNAME_SPEAKER);
-#endif
 LM75B sensor(MBED_CONF_APP_PINNAME_SDA,MBED_CONF_APP_PINNAME_SCL);
 
-//PwmOut led_r (MBED_CONF_APP_PINNAME_LED_R);
-//PwmOut led_g (MBED_CONF_APP_PINNAME_LED_G);
-//PwmOut led_b (MBED_CONF_APP_PINNAME_LED_B);
+
+PwmOut led_r (MBED_CONF_APP_PINNAME_LED_R);
+PwmOut led_g (MBED_CONF_APP_PINNAME_LED_G);
+DigitalOut led_b (MBED_CONF_APP_PINNAME_LED_B);
 
 void mbed_app_lcd_init()
 {
-     printf("# wisun_smart_meter_init >> 4\n");
-    /*
+    DBG(" mbed_app_lcd_ini >>>\n");
+    
     lcd.cls();
     lcd.invert(0);
     ThisThread::sleep_for(100);
@@ -56,20 +55,51 @@ void mbed_app_lcd_init()
     lcd.invert(0); 
     ThisThread::sleep_for(100);
     lcd.invert(1);
-    */
+
     lcd.cls();
-    lcd.locate(0,3);
-    lcd.printf("WISUN-SMART-METER:");  
-    ThisThread::sleep_for(1000);
+    lcd.locate(15,10);
+    lcd.printf("WISUN-SMART-METER");
+}
+
+void mbed_app_lcd_clear()
+{
+    lcd.cls();
 }
 
 void mbed_app_lcd_fresh(float tmp, float vol, float cur, float pwr)
 {
-    lcd.cls();
-    lcd.locate(0,3);
-    lcd.printf("WISUN-SMART-METER TMP: %.1f", tmp);  
-    lcd.locate(0,15);
-    lcd.printf("CUR: %.1f A  VOL: %.1f V  PWR:%.1f kWh\n",cur,vol,pwr);
+    platform_enter_critical();
+    lcd.locate(0,5);
+    lcd.printf(" TMP: %2.1f PWR: %3.2f Wh",tmp, pwr);
+    lcd.locate(0,18);
+    lcd.printf(" CUR: %2.1fA VOL: %3.1fV\n",cur,vol);
+    platform_exit_critical();
+}
+
+void mbed_app_led_init()
+{
+    led_r.period(2);
+    led_g.period(2);
+    led_r = 0.5;
+    led_b = 1;
+    led_g = 1;
+}
+
+void mbed_app_led_ctl(int enable, int color)
+{
+    DBG("\n#mbed_app_led_ctl Enable %x, Color: %d - (R %d,G %d,B %d)\n",enable, color,(color&0x4)?1:0,(color&0x2)?1:0,(color&0x1)?1:0);
+    if(enable)
+    {
+        led_r = (color&0x4)?0:1;
+        led_g = (color&0x2)?0:1;
+        led_b = (color&0x1)?0:1;
+    }
+    else
+    {
+        led_r = 1;
+        led_g = 1;
+        led_b = 1;
+    }
 }
 
 float mbed_app_get_temperature()
@@ -81,16 +111,17 @@ float mbed_app_get_temperature()
 float mbed_app_get_current()
 {
     // Simulate Current value (0~40A)
-    return (float)(pot1*40);
+    return (float)(pot1*5);
 }
 
 float mbed_app_get_voltage()
 {
     // Simulate Votage value (0~250V)
-    return (float)(pot2*250);
+    return (float)(pot2*50+200);
 }
 
-#ifdef TEST
+
+#ifdef DRIVER_TEST
 void mbed_app_driver_test()
 {
     int i = 0;
@@ -153,42 +184,5 @@ void mbed_app_driver_test()
     }
 }
 #endif
-
-#else
-
-
-void mbed_app_lcd_init()
-{
-
-}
-
-void mbed_app_lcd_fresh(float tmp, float vol, float cur, float pwr)
-{
-
-}
-
-float mbed_app_get_temperature()
-{
-    //lcd.printf("Temp Sensor = %.1f\n", sensor.temp());
-    return 27;
-}
-
-float mbed_app_get_current()
-{
-    // Simulate Current value (0~40A)
-    return 20;
-}
-
-float mbed_app_get_voltage()
-{
-    // Simulate Votage value (0~250V)
-    return 220;
-}
-
-
-void mbed_app_driver_test()
-{
- 
-}
 
 #endif

@@ -18,115 +18,51 @@
 
 #include "wisun_smart_meter.h"
 
+#if defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
+
 static SimpleM2MClient *_client;
 static M2MResource *_res_led_color;
 static M2MResource *_res_led_enable;
 static M2MResource *_res_alarm_enable;
 static M2MResource *_res_alarm_duration;
 static M2MResource *_res_temp_value;
-static M2MResource *_res_temp_sfreq;
+//static M2MResource *_res_temp_sfreq;
 static M2MResource *_res_cur_value;
-static M2MResource *_res_cur_sfreq;
+//static M2MResource *_res_cur_sfreq;
 static M2MResource *_res_vol_value;
-static M2MResource *_res_vol_sfreq;
+//static M2MResource *_res_vol_sfreq;
 static M2MResource *_res_pwr_ainst;
 static M2MResource *_res_pwr_acuml;   
 static M2MResource *_res_pwr_acuml_reset;    
 static M2MResource *_res_pwr_sfreq;
+static M2MResource *_res_pwr_control;
 
 static EventQueue *_event_queue_msg;
 static EventQueue *_event_queue_alarm;
 
-static Ticker _timer_pwr;
-static Ticker _timer_tmp;
-static Ticker _timer_vol;
-static Ticker _timer_cur;
+//static Thread _thread_smeter(osPriorityLow);
+static Thread _thread_smeter(osPriorityNormal);
+
+static Ticker _timer_sfreq;
+
+static SmartMeterState _state = STATE_IDLE;
 
 static float _cur;
 static float _vol;
 static float _pwr;
 static float _tmp;
-static float _cur_sfreq;
-static float _vol_sfreq;
 static float _pwr_sfreq;
-static float _tmp_sfreq;
 
-static void _init_display();
-static void _update_current();
-static void _update_voltage();
-static void _update_temporature();
-static void _update_power();
-
-static void callback_tempfreq_updated(const char *)
-{
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
-
-    float sfreq = _res_temp_sfreq->get_value_float();
-    if((sfreq<WISUN_SMART_METER_INTERVAL_MIN)||(sfreq>WISUN_SMART_METER_INTERVAL_MIN))
-    {
-        tr_error("[SMeter] The requested sampling freqency is out of scope.");
-        return;
-    }
-
-    if(sfreq!=_tmp_sfreq)
-    {
-        _tmp_sfreq = sfreq;
-        _timer_tmp.detach();
-        _timer_tmp.attach(_event_queue_msg->event(&_update_temporature), _tmp_sfreq);
-
-        tr_info("[SMeter][%s] Temp sampling freqency has been updated to %.1f \r\n", __FUNCTION__, _tmp_sfreq);
-    }
-}
-
-static void callback_curfreq_updated(const char *)
-{
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
-
-    float sfreq = _res_cur_sfreq->get_value_float();
-    if((sfreq<WISUN_SMART_METER_INTERVAL_MIN)||(sfreq>WISUN_SMART_METER_INTERVAL_MIN))
-    {
-        tr_error("[SMeter] The requested sampling freqency is out of scope.");
-        return;
-    }
-
-    if(sfreq!=_cur_sfreq)
-    {
-        _cur_sfreq = sfreq;
-        _timer_tmp.detach();
-        _timer_tmp.attach(_event_queue_msg->event(&_update_current), _cur_sfreq);
-
-        tr_info("[SMeter][%s] current sampling freqency has been updated to %.1f \r\n", __FUNCTION__, _cur_sfreq);
-    }
-
-}
-
-static void callback_volfreq_updated(const char *)
-{
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
-
-    float sfreq = _res_temp_sfreq->get_value_float();
-    if((sfreq<WISUN_SMART_METER_INTERVAL_MIN)||(sfreq>WISUN_SMART_METER_INTERVAL_MIN))
-    {
-        tr_error("[SMeter] The requested sampling freqency is out of scope.");
-        return;
-    }
-
-    if(sfreq!=_vol_sfreq)
-    {
-        _vol_sfreq = sfreq;
-        _timer_tmp.detach();
-        _timer_tmp.attach(_event_queue_msg->event(&_update_voltage), _vol_sfreq);
-
-        tr_info("[SMeter][%s] Voltage sampling freqency has been updated to %.1f \r\n", __FUNCTION__, _vol_sfreq);
-    }
-}
+static void _update_resource();
+static void _update_sensor();
+static void _update_state(SmartMeterState state);
 
 static void callback_pwrfreq_updated(const char *)
 {
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+    tr_warn("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
 
     float sfreq = _res_pwr_sfreq->get_value_float();
-    if((sfreq<WISUN_SMART_METER_INTERVAL_MIN)||(sfreq>WISUN_SMART_METER_INTERVAL_MIN))
+    if((sfreq<WISUN_SMART_METER_INTERVAL_MIN)||(sfreq>WISUN_SMART_METER_INTERVAL_MAX))
     {
         tr_error("[SMeter] The requested sampling freqency is out of scope.");
         return;
@@ -135,40 +71,57 @@ static void callback_pwrfreq_updated(const char *)
     if(sfreq!=_pwr_sfreq)
     {
         _pwr_sfreq = sfreq;
-        _timer_tmp.detach();
-        _timer_tmp.attach(_event_queue_msg->event(&_update_voltage), _pwr_sfreq);
+        _res_pwr_sfreq->set_value_float(_pwr_sfreq);
 
-        tr_info("[SMeter][%s] Power sampling freqency has been updated to %.1f \r\n", __FUNCTION__, _pwr_sfreq);
+        _timer_sfreq.detach();
+        _timer_sfreq.attach(_event_queue_msg->event(&_update_resource), _pwr_sfreq);
+        tr_warn("[SMeter][%s] Power sampling freqency has been updated to %.1f \r\n", __FUNCTION__, _pwr_sfreq);
     }
 }
 
 static void callback_pwrreset_updated(const char *)
 {
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
-
-    _timer_pwr.detach();
+    tr_warn("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+    //_timer_sfreq.detach();
     _pwr = 0;
-    _res_pwr_acuml->set_value(_pwr);
-    _timer_pwr.attach(_event_queue_msg->event(&_update_power), WISUN_SMART_METER_INTERVAL_PWR);
-
-    tr_info("[SMeter][%s] Cumulative active power has been reset.\n", __FUNCTION__, _pwr_sfreq);
+    _res_pwr_acuml->set_value(0);
+    //_timer_sfreq.attach(_event_queue_msg->event(&_update_resource), _pwr_sfreq);
+    tr_warn("[SMeter][%s] Cumulative active power has been reset.\n", __FUNCTION__);
 }
 
-static void callback_leden_updated(const char *)
+static void callback_pwrctl_updated(const char *)
 {
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+    tr_warn("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+
+    if(_res_pwr_control->get_value_int())
+    {
+        _update_state(STATE_STARTED);
+    }
+    else
+    {
+        _update_state(STATE_POSTPONE);
+    }
+
+    tr_warn("[SMeter][%s] Cumulative active power has been reset.\n", __FUNCTION__);
 }
-static void callback_ledcol_updated(const char *)
+
+static void callback_led_updated(const char *)
 {
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+    tr_warn("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+
+    int en = _res_led_enable->get_value_int();
+    int col = _res_led_color->get_value_int();
+
+    mbed_app_led_ctl(en,col);
 }
+
 static void callback_almen_updated(const char *)
 {
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+    tr_warn("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
 }
 static void callback_almdur_updated(const char *)
 {
-    tr_debug("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
+    tr_warn("[SMeter] callback %s has been triggered!\r\n", __FUNCTION__);
 }
 
 static void callback_notification_status(const M2MBase& object,
@@ -205,155 +158,163 @@ static void callback_notification_status(const M2MBase& object,
     }
 }
 
-static void _update_temporature()
+
+static void _update_resource()
 {
-    static float tmpvalue;
-    tmpvalue = mbed_app_get_temperature();
-    if(tmpvalue!=_tmp)
+    tr_warn("[SMeter][%s-%d] Resource Update \n", __FUNCTION__,__LINE__);
+
+    _res_temp_value->set_value_float(_tmp);
+    _res_cur_value->set_value_float(_cur);
+    _res_vol_value->set_value_float(_vol);
+    _res_pwr_ainst->set_value_float(_cur*_vol);
+    _res_pwr_acuml->set_value_float(_pwr);
+}
+
+static void _update_sensor()
+{
+    tr_warn("[SMeter][%s-%d] Sensor Update \n", __FUNCTION__,__LINE__);
+    int i=0;
+    while(_state!=STATE_STOPED)
     {
-        _tmp = tmpvalue;
-    
-        //if((_client->is_client_registered())&&(_res_temp_value!=NULL))
-        if(_res_temp_value!=NULL)
+        _tmp = mbed_app_get_temperature();
+        _vol = mbed_app_get_voltage();
+        if(_state == STATE_STARTED)
         {
-            _res_temp_value->set_value(_tmp);
+            _cur = mbed_app_get_current();
+            _pwr += _cur*_vol/7200;
+        }
+        else
+        {
+            _cur = 0;
         }
 
-        mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);
+        tr_warn("[SMeter][%s-%d] %2.1f, %3.3f, %2.1f, %3.1f \n", __FUNCTION__,__LINE__, _tmp, _pwr, _cur, _vol);
+        mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);  
+        ThisThread::sleep_for(1000); 
     }
 }
 
-static void _update_current()
+static void _update_state(SmartMeterState state)
 {
-    static float curvalue;
-    curvalue = mbed_app_get_current();
-    if(curvalue!=_cur)
+    if(_state==state)
     {
-        _cur = curvalue;
-    
-        if(_res_cur_value!=NULL)
-        {
-            _res_cur_value->set_value(_cur);
-        }
+        tr_warn("[SMeter][%s-%d] No state update \n", __FUNCTION__,__LINE__);
+        return;
+    }
 
-        mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);
+    if(state == STATE_CONNECT)
+    {
+        tr_warn("[SMeter][%s-%d] State Update to STATE_CONNECT\n", __FUNCTION__,__LINE__);
+        _state = STATE_CONNECT;
+
+        _res_led_enable->set_value(true);
+        _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_R);
+        mbed_app_led_ctl(true,WISUN_SMART_METER_LED_BIT_R);
+    }
+    else if(state == STATE_STARTED)
+    {
+        tr_warn("[SMeter][%s-%d] State Update to STATE_STARTED\n", __FUNCTION__,__LINE__);
+        _state = STATE_STARTED;       
+        _res_led_enable->set_value(true);
+        _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_G);
+        mbed_app_led_ctl(1,WISUN_SMART_METER_LED_BIT_G);
+    }
+    else if(state == STATE_POSTPONE)
+    {
+        tr_warn("[SMeter][%s-%d] State Update to STATE_POSTPONE\n", __FUNCTION__,__LINE__);
+        _state = STATE_POSTPONE;
+        _res_led_enable->set_value(true);
+        _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_B);
+        mbed_app_led_ctl(1,WISUN_SMART_METER_LED_BIT_B);
+    }
+    else if(state == STATE_STOPED)
+    {
+        tr_warn("[SMeter][%s-%d] State Update to STATE_STOPED\n", __FUNCTION__,__LINE__);
+        _res_led_enable->set_value(false);
+        _state = STATE_STOPED;
+    }
+    else
+    {
+        tr_err("[SMeter][%s-%d] Unknow STate! \n", __FUNCTION__,__LINE__);
     }
 }
 
-static void _update_voltage()
-{
-    static float volvalue;
-    volvalue = mbed_app_get_voltage();
-    if(volvalue!=_vol)
-    {
-        _vol = volvalue;
-    
-        if(_res_vol_value!=NULL)
-        {
-            _res_vol_value->set_value(_vol);
-        }
-
-        mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);
-    }
-}
-
-static void _update_power()
-{
-    float pwr_ainst = _vol*_cur;
-    
-    // 
-    _pwr += pwr_ainst*_pwr_sfreq;
-   
-    if((_res_pwr_ainst!=NULL)&&(_res_pwr_acuml!=NULL))
-    {
-        _res_pwr_ainst->set_value(pwr_ainst);
-        _res_pwr_acuml->set_value(_pwr);
-    }
-
-    mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);
-}
-
-static void _init_display()
+void wisun_smart_meter_init_display()
 {
     mbed_app_lcd_init();
+    mbed_app_led_init();
 }
 
-
 // use references to encourage caller to pass this existing object
-void wisun_smart_meter_init(SimpleM2MClient &client)
+void wisun_smart_meter_init_client(SimpleM2MClient &client)
 {
-    printf("# wisun_smart_meter_init >> 1\n");
+    tr_warn("[SMeter][%s-%d]  \n", __FUNCTION__,__LINE__);
     // Do not start if client has not been assigned.
     if (_client) return;
-    _client = &client;
-    printf("# wisun_smart_meter_init >> 2\n");
 
+    _client = &client;
     _pwr = 0;
     _cur = mbed_app_get_current();
     _vol = mbed_app_get_voltage();
     _tmp = mbed_app_get_temperature();
 
-    _init_display();
-    _update_current();
-    _update_voltage();
-    _update_temporature();
+    mbed_app_lcd_clear();
+    mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);
 
-    _cur_sfreq = WISUN_SMART_METER_INTERVAL_CUR;
-    _vol_sfreq = WISUN_SMART_METER_INTERVAL_VOL;
+    //_cur_sfreq = WISUN_SMART_METER_INTERVAL_CUR;
+    //_vol_sfreq = WISUN_SMART_METER_INTERVAL_VOL;
+    //_tmp_sfreq = WISUN_SMART_METER_INTERVAL_TMP;
     _pwr_sfreq = WISUN_SMART_METER_INTERVAL_PWR;
-    _tmp_sfreq = WISUN_SMART_METER_INTERVAL_TMP;
 
+    _res_temp_value = _client->add_cloud_resource(3303, 0, 5700, "[SMeter] ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
+    _res_vol_value = _client->add_cloud_resource(3316, 0, 5700, "[SMeter] ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
+    _res_cur_value= _client->add_cloud_resource(3317, 0, 5700, "[SMeter] - Sensor Value", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
+    _res_led_enable = _client->add_cloud_resource(3311, 0, 5850, "[SMeter] ", M2MResourceInstance::BOOLEAN,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_led_updated, (void*)callback_notification_status);
+    _res_led_color = _client->add_cloud_resource(3311, 0, 5706, "[SMeter] ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_led_updated, (void*)callback_notification_status);
+    _res_alarm_enable = _client->add_cloud_resource(3338, 0, 5850, "[SMeter] ", M2MResourceInstance::BOOLEAN,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_almen_updated, (void*)callback_notification_status);
+    _res_alarm_duration = _client->add_cloud_resource(3338, 0, 5521, "[SMeter] ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_almdur_updated, (void*)callback_notification_status);
+
+    _res_pwr_ainst = _client->add_cloud_resource(3305, 0, 5800, "[SMeter] ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
+    _res_pwr_acuml = _client->add_cloud_resource(3305, 0, 5805, "[SMeter] ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
+    _res_pwr_sfreq = _client->add_cloud_resource(3305, 0, 6040, "[SMeter] - Sampling Freqency", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_pwrfreq_updated, (void*)callback_notification_status);
+    _res_pwr_acuml_reset = _client->add_cloud_resource(3305, 0, 5822, "[SMeter] ", M2MResourceInstance::BOOLEAN,M2MBase::POST_ALLOWED, 0, true, (void*)callback_pwrreset_updated, (void*)callback_notification_status);
+
+    _res_pwr_control = _client->add_cloud_resource(3312, 0, 5850, "[SMeter] - Power Control", M2MResourceInstance::BOOLEAN,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_pwrctl_updated, (void*)callback_notification_status);
+    
+    // Set the sample freqency to 1 second as default.
+    _res_temp_value->set_value(_tmp);
+    _res_vol_value->set_value(_cur);
+    _res_cur_value->set_value(_vol);
+
+    _res_pwr_sfreq->set_value(_pwr_sfreq);
+    _res_pwr_ainst->set_value_float(_cur*_vol);
+    _res_pwr_acuml->set_value_float(_pwr);
+
+    _res_pwr_acuml_reset->set_value_float(0);
+
+    _res_alarm_enable->set_value(0);
+    _res_alarm_duration->set_value(WISUN_SMART_METER_ALARM_DURATION);
+    _res_pwr_control->set_value(true);
+
+    _update_state(STATE_CONNECT);
+    _thread_smeter.start(_update_sensor);
 }
 
 void wisun_smart_meter_start()
 {
-    _res_temp_value = _client->add_cloud_resource(3303, 0, 5700, "SMeter: ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
-    _res_temp_sfreq = _client->add_cloud_resource(3303, 0, 6040, "SMeter: ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_tempfreq_updated, (void*)callback_notification_status);
-    _res_cur_value = _client->add_cloud_resource(3316, 0, 5700, "SMeter: ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
-    _res_cur_sfreq = _client->add_cloud_resource(3316, 0, 6040, "SMeter: ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_curfreq_updated, (void*)callback_notification_status);
-    _res_vol_value = _client->add_cloud_resource(3317, 0, 5700, "SMeter: ", M2MResourceInstance::FLOAT,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
-    _res_vol_sfreq = _client->add_cloud_resource(3317, 0, 6040, "SMeter: ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_volfreq_updated, (void*)callback_notification_status);
-    _res_led_enable = _client->add_cloud_resource(3311, 0, 5850, "SMeter: ", M2MResourceInstance::BOOLEAN,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_leden_updated, (void*)callback_notification_status);
-    _res_led_color = _client->add_cloud_resource(3311, 0, 5706, "SMeter: ", M2MResourceInstance::STRING,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_ledcol_updated, (void*)callback_notification_status);
-    _res_alarm_enable = _client->add_cloud_resource(3338, 0, 5850, "SMeter: ", M2MResourceInstance::BOOLEAN,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_almen_updated, (void*)callback_notification_status);
-    _res_alarm_duration = _client->add_cloud_resource(3338, 0, 5521, "SMeter: ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_almdur_updated, (void*)callback_notification_status);
-
-    _res_pwr_ainst = _client->add_cloud_resource(3305, 0, 5800, "SMeter: ", M2MResourceInstance::STRING,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
-    _res_pwr_acuml = _client->add_cloud_resource(3305, 0, 5805, "SMeter: ", M2MResourceInstance::BOOLEAN,M2MBase::GET_ALLOWED, 0, true, NULL, (void*)callback_notification_status);
-    _res_pwr_sfreq = _client->add_cloud_resource(3305, 0, 5822, "SMeter: ", M2MResourceInstance::INTEGER,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_pwrfreq_updated, (void*)callback_notification_status);
-    _res_pwr_acuml_reset = _client->add_cloud_resource(3305, 0, 6040, "SMeter: ", M2MResourceInstance::FLOAT,M2MBase::POST_ALLOWED, 0, true, (void*)callback_pwrreset_updated, (void*)callback_notification_status);
-
-    // Set the sample freqency to 1 second as default.
-    _res_temp_sfreq->set_value(_tmp_sfreq);
-    _res_cur_sfreq->set_value(_cur_sfreq);
-    _res_vol_sfreq->set_value(_vol_sfreq);
-    _res_pwr_sfreq->set_value(_pwr_sfreq);
-
-    _res_pwr_ainst->set_value(0);
-    _res_pwr_acuml->set_value(0);
-    _res_pwr_acuml_reset->set_value(0);
-
-    _res_led_enable->set_value(0);
-    _res_alarm_enable->set_value(0);
-    _res_alarm_duration->set_value(WISUN_SMART_METER_ALARM_DURATION);
+    tr_warn("[SMeter][%s-%d]  \n", __FUNCTION__,__LINE__);
+    _update_state(STATE_STARTED);
 
     _event_queue_msg = mbed_event_queue();
     _event_queue_alarm = mbed_highprio_event_queue();
-
-    _event_queue_msg->dispatch_forever();
-    _event_queue_alarm->dispatch_forever();
-
-    _timer_pwr.attach(_event_queue_msg->event(&_update_power), _pwr_sfreq);
-    _timer_tmp.attach(_event_queue_msg->event(&_update_temporature), _tmp_sfreq);
-    _timer_vol.attach(_event_queue_msg->event(&_update_voltage), _vol_sfreq);
-    _timer_cur.attach(_event_queue_msg->event(&_update_current), _cur_sfreq);
+ 
+    _timer_sfreq.attach(_event_queue_msg->event(&_update_resource), _pwr_sfreq);
 }
-
 
 void wisun_smart_meter_stop()
 {
-    _timer_pwr.detach();
-    _timer_tmp.detach();
-    _timer_vol.detach();
-    _timer_cur.detach();
+    _update_state(STATE_STOPED); 
+    _timer_sfreq.detach();
 }
+
+#endif

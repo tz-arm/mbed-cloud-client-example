@@ -1,5 +1,8 @@
 {
     "macros": [
+        "S2LP_SPI_SDN=D0",
+        "S2LP_SPI_GPIO0=A4",
+        "S2LP_SPI_CS=D1",
         "MBED_TRACE_MAX_LEVEL=TRACE_LEVEL_INFO",
         "ARM_UC_USE_PAL_BLOCKDEVICE=1",
         "MBEDTLS_PEM_PARSE_C",
