@@ -37,11 +37,15 @@ static M2MResource *_res_pwr_acuml_reset;
 static M2MResource *_res_pwr_sfreq;
 static M2MResource *_res_pwr_control;
 
+#ifdef WISUN_SMART_METER_NM
+static M2MResource* _res_nm_iid;
+#endif
+
 static EventQueue *_event_queue_msg;
 static EventQueue *_event_queue_alarm;
 
-//static Thread _thread_smeter(osPriorityLow);
-static Thread _thread_smeter(osPriorityNormal);
+static Thread _thread_smeter(osPriorityLow);
+//static Thread _thread_smeter(osPriorityNormal);
 
 static Ticker _timer_sfreq;
 
@@ -53,6 +57,9 @@ static float _pwr;
 static float _tmp;
 static float _pwr_sfreq;
 
+#ifdef WISUN_SMART_METER_NM
+static void _update_iid();
+#endif
 static void _update_resource();
 static void _update_sensor();
 static void _update_state(SmartMeterState state);
@@ -158,22 +165,82 @@ static void callback_notification_status(const M2MBase& object,
     }
 }
 
+#ifdef WISUN_SMART_METER_NM
+static void _update_iid()
+{
+    static SocketAddress sa;
+    nsapi_error_t err;
+    static uint8_t IIDs[8];
+    uint8_t* ip_t;
+    
+    NetworkInterface* netif = (NetworkInterface*) mcc_platform_interface_get();
+    err = netif->get_ip_address(&sa);
+    ip_t = (uint8_t*)sa.get_ip_bytes();
+
+    tr_warn("[SMeter][%s-%d] IP bytes: \n", __FUNCTION__,__LINE__);
+    for(int i =0; i<16; i++)
+    {
+        printf("%2x ", ip_t[i]);
+    }
+    printf("\r\n");
+    memcpy(IIDs,ip_t+8,8);
+
+    if(_res_nm_iid!=NULL)
+        _res_nm_iid->set_value_raw(IIDs,8);
+}
+#endif
 
 static void _update_resource()
 {
+    static float tmp = 0;
+    static float cur = 0;
+    static float vol = 0;
+    static float pwr_ainst = 0;
+    static float pwr_acuml = 0;
     tr_warn("[SMeter][%s-%d] Resource Update \n", __FUNCTION__,__LINE__);
 
-    _res_temp_value->set_value_float(_tmp);
-    _res_cur_value->set_value_float(_cur);
-    _res_vol_value->set_value_float(_vol);
-    _res_pwr_ainst->set_value_float(_cur*_vol);
-    _res_pwr_acuml->set_value_float(_pwr);
+    if(tmp!=_tmp)
+    {   
+        tr_warn("[SMeter][%s-%d] TMP %f \n", __FUNCTION__,__LINE__,_tmp);
+        tmp = _tmp;
+        _res_temp_value->set_value_float(tmp);
+    }
+
+    if(cur!=_cur)
+    {   
+        tr_warn("[SMeter][%s-%d] CUR %f \n", __FUNCTION__,__LINE__,_cur);
+        cur = _cur;
+        _res_cur_value->set_value_float(cur);
+    }
+
+    if(vol!=_vol)
+    {   
+        tr_warn("[SMeter][%s-%d] VOL %f \n", __FUNCTION__,__LINE__,_vol);
+        vol = _vol;
+        _res_vol_value->set_value_float(vol);
+    }  
+
+/*
+    if(pwr_ainst!=_cur*_vol)
+    {   
+        tr_warn("[SMeter][%s-%d]  \n", __FUNCTION__,__LINE__);
+        pwr_ainst = _cur*_vol;
+        _res_pwr_ainst->set_value_float(pwr_ainst);
+    }
+*/
+
+    if(pwr_acuml!=_pwr)
+    {   
+        tr_warn("[SMeter][%s-%d] PWR %f\n", __FUNCTION__,__LINE__,_pwr);
+        pwr_acuml = _pwr;
+        _res_pwr_acuml->set_value_float(pwr_acuml);
+    }
+
 }
 
 static void _update_sensor()
 {
     tr_warn("[SMeter][%s-%d] Sensor Update \n", __FUNCTION__,__LINE__);
-    int i=0;
     while(_state!=STATE_STOPED)
     {
         _tmp = mbed_app_get_temperature();
@@ -188,7 +255,7 @@ static void _update_sensor()
             _cur = 0;
         }
 
-        tr_warn("[SMeter][%s-%d] %2.1f, %3.3f, %2.1f, %3.1f \n", __FUNCTION__,__LINE__, _tmp, _pwr, _cur, _vol);
+        //tr_warn("[SMeter][%s-%d] %2.1f, %3.3f, %2.1f, %3.1f \n", __FUNCTION__,__LINE__, _tmp, _pwr, _cur, _vol);
         mbed_app_lcd_fresh(_tmp,_vol,_cur,_pwr);  
         ThisThread::sleep_for(1000); 
     }
@@ -280,7 +347,11 @@ void wisun_smart_meter_init_client(SimpleM2MClient &client)
     _res_pwr_acuml_reset = _client->add_cloud_resource(3305, 0, 5822, "[SMeter] ", M2MResourceInstance::BOOLEAN,M2MBase::POST_ALLOWED, 0, true, (void*)callback_pwrreset_updated, (void*)callback_notification_status);
 
     _res_pwr_control = _client->add_cloud_resource(3312, 0, 5850, "[SMeter] - Power Control", M2MResourceInstance::BOOLEAN,M2MBase::GET_PUT_ALLOWED, 0, true, (void*)callback_pwrctl_updated, (void*)callback_notification_status);
-    
+
+#ifdef WISUN_SMART_METER_NM
+    _res_nm_iid = _client->add_cloud_resource(26241, 0, 9, "[SMeter] - IID", M2MResourceInstance::OPAQUE,M2MBase::GET_ALLOWED, NULL, true, NULL, (void*)callback_notification_status);
+#endif
+
     // Set the sample freqency to 1 second as default.
     _res_temp_value->set_value(_tmp);
     _res_vol_value->set_value(_cur);
@@ -296,6 +367,7 @@ void wisun_smart_meter_init_client(SimpleM2MClient &client)
     _res_alarm_duration->set_value(WISUN_SMART_METER_ALARM_DURATION);
     _res_pwr_control->set_value(true);
 
+    _update_iid();
     _update_state(STATE_CONNECT);
     _thread_smeter.start(_update_sensor);
 }

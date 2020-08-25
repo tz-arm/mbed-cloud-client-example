@@ -87,7 +87,7 @@ void mbed_app_led_init()
 
 void mbed_app_led_ctl(int enable, int color)
 {
-    DBG("\n#mbed_app_led_ctl Enable %x, Color: %d - (R %d,G %d,B %d)\n",enable, color,(color&0x4)?1:0,(color&0x2)?1:0,(color&0x1)?1:0);
+    //DBG("\n#mbed_app_led_ctl Enable %x, Color: %d - (R %d,G %d,B %d)\n",enable, color,(color&0x4)?1:0,(color&0x2)?1:0,(color&0x1)?1:0);
     if(enable)
     {
         led_r = (color&0x4)?0:1;
