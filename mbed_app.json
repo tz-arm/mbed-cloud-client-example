@@ -49,6 +49,7 @@
             "nsapi.dns-retries"                         : 3,
             "nanostack.configuration"                   : "ws_router",
             "s2lp.provide-default"                      : true,
+            "s2lp.mac-static"                           : true,
             "target.device_has_add"                     : ["802_15_4_PHY"]
         },
         "NUCLEO_F429ZI": {
