@@ -21,7 +21,7 @@
 #define MBED_CLOUD_CLIENT_USER_CONFIG_H
 
 #define MBED_CLOUD_CLIENT_ENDPOINT_TYPE             "WISUN-SMART-METER_RN"
-#define MBED_CLOUD_CLIENT_LIFETIME                  86400       /* 24 hours */
+#define MBED_CLOUD_CLIENT_LIFETIME                  180       /* 24 hours */
 
 #if defined(__SXOS__)
     #define MBED_CLOUD_CLIENT_TRANSPORT_MODE_UDP_QUEUE

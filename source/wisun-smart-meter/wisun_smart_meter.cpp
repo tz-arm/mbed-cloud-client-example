@@ -192,34 +192,24 @@ static void _update_iid()
 
 static void _update_resource()
 {
-    static float tmp = 0;
-    static float cur = 0;
-    static float vol = 0;
-    static float pwr_ainst = 0;
-    static float pwr_acuml = 0;
-    tr_warn("[SMeter][%s-%d] Resource Update \n", __FUNCTION__,__LINE__);
-
-    if(tmp!=_tmp)
-    {   
+    //tr_warn("[SMeter][%s-%d] Resource Update \n", __FUNCTION__,__LINE__);
+    if(_res_temp_value->get_value_float()!=_tmp)
+    {
         tr_warn("[SMeter][%s-%d] TMP %f \n", __FUNCTION__,__LINE__,_tmp);
-        tmp = _tmp;
-        _res_temp_value->set_value_float(tmp);
+        _res_temp_value->set_value_float(_tmp);
     }
 
-    if(cur!=_cur)
-    {   
+    if(_res_cur_value->get_value_float()!=_cur)
+    {
         tr_warn("[SMeter][%s-%d] CUR %f \n", __FUNCTION__,__LINE__,_cur);
-        cur = _cur;
-        _res_cur_value->set_value_float(cur);
+        _res_cur_value->set_value_float(_cur);
     }
 
-    if(vol!=_vol)
-    {   
+    if(_res_vol_value->get_value_float()!=_vol)
+    {
         tr_warn("[SMeter][%s-%d] VOL %f \n", __FUNCTION__,__LINE__,_vol);
-        vol = _vol;
-        _res_vol_value->set_value_float(vol);
-    }  
-
+        _res_vol_value->set_value_float(_vol);
+    }
 /*
     if(pwr_ainst!=_cur*_vol)
     {   
@@ -228,14 +218,11 @@ static void _update_resource()
         _res_pwr_ainst->set_value_float(pwr_ainst);
     }
 */
-
-    if(pwr_acuml!=_pwr)
+   if(_res_vol_value->get_value_float()!=_pwr)
     {   
-        tr_warn("[SMeter][%s-%d] PWR %f\n", __FUNCTION__,__LINE__,_pwr);
-        pwr_acuml = _pwr;
-        _res_pwr_acuml->set_value_float(pwr_acuml);
+        tr_warn("[SMeter][%s-%d] PWR %f \n", __FUNCTION__,__LINE__,_pwr);
+        _res_vol_value->set_value_float(_pwr);
     }
-
 }
 
 static void _update_sensor()

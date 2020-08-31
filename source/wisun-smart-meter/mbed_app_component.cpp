@@ -70,7 +70,7 @@ void mbed_app_lcd_fresh(float tmp, float vol, float cur, float pwr)
 {
     platform_enter_critical();
     lcd.locate(0,5);
-    lcd.printf(" TMP: %2.1f PWR: %3.2f Wh",tmp, pwr);
+    lcd.printf(" TMP: %2.1f PWR: %2.4f Wh",tmp, pwr/1000);
     lcd.locate(0,18);
     lcd.printf(" CUR: %2.1fA VOL: %3.1fV\n",cur,vol);
     platform_exit_critical();
