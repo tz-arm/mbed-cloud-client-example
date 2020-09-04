@@ -119,7 +119,7 @@ static void callback_led_updated(const char *)
     int en = _res_led_enable->get_value_int();
     int col = _res_led_color->get_value_int();
 
-    mbed_app_led_ctl(en,col);
+    mbed_app_led_ctl(en,col,0);
 }
 
 static void callback_almen_updated(const char *)
@@ -192,54 +192,74 @@ static void _update_iid()
 
 static void _update_resource()
 {
-    //tr_warn("[SMeter][%s-%d] Resource Update \n", __FUNCTION__,__LINE__);
-    if(_res_temp_value->get_value_float()!=_tmp)
+#if 0
+    float tmp = _res_temp_value->get_value_float();
+    if(abs((_tmp-tmp))>=WISUN_SMART_METER_VALUE_THRESHOLD);
     {
-        tr_warn("[SMeter][%s-%d] TMP %f \n", __FUNCTION__,__LINE__,_tmp);
+        tr_warn("[SMeter][%s-%d] TMP %f, %f, %d \n", __FUNCTION__,__LINE__,_tmp,tmp,abs((_tmp-tmp)));
         _res_temp_value->set_value_float(_tmp);
     }
 
-    if(_res_cur_value->get_value_float()!=_cur)
+    float cur = _res_cur_value->get_value_float();
+    if(abs((_cur-cur))>=WISUN_SMART_METER_VALUE_THRESHOLD);
     {
-        tr_warn("[SMeter][%s-%d] CUR %f \n", __FUNCTION__,__LINE__,_cur);
+        tr_warn("[SMeter][%s-%d] CUR %f, %f, %d \n", __FUNCTION__,__LINE__,_cur,cur,abs((_cur-cur)));
         _res_cur_value->set_value_float(_cur);
     }
 
-    if(_res_vol_value->get_value_float()!=_vol)
+    float vol = _res_vol_value->get_value_float();
+    if(abs((_vol-vol))>=WISUN_SMART_METER_VALUE_THRESHOLD);
     {
-        tr_warn("[SMeter][%s-%d] VOL %f \n", __FUNCTION__,__LINE__,_vol);
+        tr_warn("[SMeter][%s-%d] VOL %f, %f, %d \n", __FUNCTION__,__LINE__,_vol,vol,abs((_vol-vol)));
         _res_vol_value->set_value_float(_vol);
     }
-/*
-    if(pwr_ainst!=_cur*_vol)
-    {   
-        tr_warn("[SMeter][%s-%d]  \n", __FUNCTION__,__LINE__);
-        pwr_ainst = _cur*_vol;
-        _res_pwr_ainst->set_value_float(pwr_ainst);
-    }
-*/
-   if(_res_vol_value->get_value_float()!=_pwr)
+#endif
+
+    if(_res_pwr_acuml->get_value_float()!=_pwr)
     {   
         tr_warn("[SMeter][%s-%d] PWR %f \n", __FUNCTION__,__LINE__,_pwr);
-        _res_vol_value->set_value_float(_pwr);
+        _res_pwr_acuml->set_value_float(_pwr);
     }
 }
 
 static void _update_sensor()
 {
+    float tmp, cur, vol;
     tr_warn("[SMeter][%s-%d] Sensor Update \n", __FUNCTION__,__LINE__);
     while(_state!=STATE_STOPED)
     {
         _tmp = mbed_app_get_temperature();
         _vol = mbed_app_get_voltage();
+
         if(_state == STATE_STARTED)
         {
             _cur = mbed_app_get_current();
-            _pwr += _cur*_vol/7200;
+            _pwr += _cur*_vol/7200/1000;
         }
         else
         {
             _cur = 0;
+        }
+
+        tmp = _res_temp_value->get_value_float();
+        if(fabs(_tmp-tmp)>=WISUN_SMART_METER_VALUE_THRESHOLD)
+        {
+            tr_warn("[SMeter][%s-%d] TMP %f, %f, %f : %d\n", __FUNCTION__,__LINE__,_tmp,tmp,fabs((_tmp-tmp)));
+            _res_temp_value->set_value_float(_tmp);
+        }
+
+        cur = _res_cur_value->get_value_float();
+        if(fabs((_cur-cur))>=WISUN_SMART_METER_VALUE_THRESHOLD)
+        {
+            tr_warn("[SMeter][%s-%d] CUR %f, %f, %f \n", __FUNCTION__,__LINE__,_cur,cur,fabs((_cur-cur)));
+            _res_cur_value->set_value_float(_cur);
+        }
+
+        vol = _res_vol_value->get_value_float();
+        if(fabs((_vol-vol))>=WISUN_SMART_METER_VALUE_THRESHOLD)
+        {
+            tr_warn("[SMeter][%s-%d] VOL %f, %f, %f \n", __FUNCTION__,__LINE__,_vol,vol,fabs((_vol-vol)));
+            _res_vol_value->set_value_float(_vol);
         }
 
         //tr_warn("[SMeter][%s-%d] %2.1f, %3.3f, %2.1f, %3.1f \n", __FUNCTION__,__LINE__, _tmp, _pwr, _cur, _vol);
@@ -263,7 +283,7 @@ static void _update_state(SmartMeterState state)
 
         _res_led_enable->set_value(true);
         _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_R);
-        mbed_app_led_ctl(true,WISUN_SMART_METER_LED_BIT_R);
+        mbed_app_led_ctl(true,WISUN_SMART_METER_LED_BIT_R,1);
     }
     else if(state == STATE_STARTED)
     {
@@ -271,7 +291,7 @@ static void _update_state(SmartMeterState state)
         _state = STATE_STARTED;       
         _res_led_enable->set_value(true);
         _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_G);
-        mbed_app_led_ctl(1,WISUN_SMART_METER_LED_BIT_G);
+        mbed_app_led_ctl(1,WISUN_SMART_METER_LED_BIT_G,0);
     }
     else if(state == STATE_POSTPONE)
     {
@@ -279,12 +299,14 @@ static void _update_state(SmartMeterState state)
         _state = STATE_POSTPONE;
         _res_led_enable->set_value(true);
         _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_B);
-        mbed_app_led_ctl(1,WISUN_SMART_METER_LED_BIT_B);
+        mbed_app_led_ctl(1,WISUN_SMART_METER_LED_BIT_B,1);
     }
     else if(state == STATE_STOPED)
     {
         tr_warn("[SMeter][%s-%d] State Update to STATE_STOPED\n", __FUNCTION__,__LINE__);
-        _res_led_enable->set_value(false);
+        _res_led_enable->set_value(true);
+        _res_led_color->set_value(WISUN_SMART_METER_LED_BIT_R);
+        mbed_app_led_ctl(true,WISUN_SMART_METER_LED_BIT_R,1);
         _state = STATE_STOPED;
     }
     else
@@ -339,10 +361,15 @@ void wisun_smart_meter_init_client(SimpleM2MClient &client)
     _res_nm_iid = _client->add_cloud_resource(26241, 0, 9, "[SMeter] - IID", M2MResourceInstance::OPAQUE,M2MBase::GET_ALLOWED, NULL, true, NULL, (void*)callback_notification_status);
 #endif
 
+    _res_temp_value->set_max_age(180);
+    _res_vol_value->set_max_age(180);
+    _res_cur_value->set_max_age(180);
+    _res_pwr_acuml->set_max_age(180);
+
     // Set the sample freqency to 1 second as default.
-    _res_temp_value->set_value(_tmp);
-    _res_vol_value->set_value(_cur);
-    _res_cur_value->set_value(_vol);
+    _res_temp_value->set_value_float(0);
+    _res_vol_value->set_value_float(0);
+    _res_cur_value->set_value_float(0);
 
     _res_pwr_sfreq->set_value(_pwr_sfreq);
     _res_pwr_ainst->set_value_float(_cur*_vol);
@@ -361,6 +388,9 @@ void wisun_smart_meter_init_client(SimpleM2MClient &client)
 
 void wisun_smart_meter_start()
 {
+    if(_state == STATE_STARTED)
+        return;
+
     tr_warn("[SMeter][%s-%d]  \n", __FUNCTION__,__LINE__);
     _update_state(STATE_STARTED);
 
@@ -372,6 +402,9 @@ void wisun_smart_meter_start()
 
 void wisun_smart_meter_stop()
 {
+    if(_state == STATE_STOPED)
+        return;
+
     _update_state(STATE_STOPED); 
     _timer_sfreq.detach();
 }

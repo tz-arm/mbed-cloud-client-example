@@ -180,7 +180,6 @@ void factory_reset_triggered(void*)
 // This function is called when a POST request is received for resource 5000/0/1.
 void unregister(void)
 {
-    printf("Unregister resource executed\r\n");
     client->close();
 }
 
@@ -352,16 +351,22 @@ void main_application(void)
     queue->dispatch_forever();
 #elif defined(PLATFORM_WISUN_SMART_METER) && (PLATFORM_WISUN_SMART_METER == 1)
     printf("Starting mbed eventloop...\3r\n");
-    while(!mbedClient.is_client_registered())
-    {
-        mcc_platform_do_wait(1000);
-    }
 
-    wisun_smart_meter_start();
-
-    while (1)
+    while(1)
     {
-        mcc_platform_do_wait(1000);
+        while(!mbedClient.is_client_registered())
+        {
+            mcc_platform_do_wait(100);
+        }
+
+        wisun_smart_meter_start();
+
+        while(mbedClient.is_client_registered())
+        {
+           mcc_platform_do_wait(1000);
+        }
+
+        wisun_smart_meter_stop();
     }
 #else
     // Check if client is registering or registered, if true sleep and repeat.

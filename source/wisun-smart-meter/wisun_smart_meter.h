@@ -29,19 +29,22 @@
 #include "simplem2mclient.h"
 #include "mbed_app_component.h"
 
-#include "mbed-trace/mbed_trace.h"
-
 #define WISUN_SMART_METER_NM 1
 
 #define WISUN_SMART_METER_INTERVAL_MIN  1
 #define WISUN_SMART_METER_INTERVAL_MAX  20
-
 #define WISUN_SMART_METER_INTERVAL_PWR  19
+
 #define WISUN_SMART_METER_ALARM_DURATION    5
+#define WISUN_SMART_METER_ALARM_TEMP  30
+#define WISUN_SMART_METER_ALARM_CUR
+#define WISUN_SMART_METER_ALARM_VOL
 
 #define WISUN_SMART_METER_LED_BIT_R 4
 #define WISUN_SMART_METER_LED_BIT_G 2
 #define WISUN_SMART_METER_LED_BIT_B 1
+
+#define WISUN_SMART_METER_VALUE_THRESHOLD 0.5
 
 typedef enum {
     STATE_IDLE,

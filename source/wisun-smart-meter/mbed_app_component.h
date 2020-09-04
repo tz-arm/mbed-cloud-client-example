@@ -57,7 +57,9 @@ float mbed_app_get_current();
 float mbed_app_get_voltage();
 
 void mbed_app_led_init();
-void mbed_app_led_ctl(int enable, int color);
+void mbed_app_led_ctl(int enable, int color, int blinky);
+
+void mbed_app_speaker_ctl(int enable);
 
 void mbed_app_lcd_init();
 void mbed_app_lcd_clear();

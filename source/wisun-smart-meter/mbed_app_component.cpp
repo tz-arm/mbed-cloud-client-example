@@ -70,7 +70,7 @@ void mbed_app_lcd_fresh(float tmp, float vol, float cur, float pwr)
 {
     platform_enter_critical();
     lcd.locate(0,5);
-    lcd.printf(" TMP: %2.1f PWR: %2.4f Wh",tmp, pwr/1000);
+    lcd.printf(" TMP: %2.1f PWR: %2.4f KWh",tmp, pwr);
     lcd.locate(0,18);
     lcd.printf(" CUR: %2.1fA VOL: %3.1fV\n",cur,vol);
     platform_exit_critical();
@@ -85,13 +85,14 @@ void mbed_app_led_init()
     led_g = 1;
 }
 
-void mbed_app_led_ctl(int enable, int color)
+void mbed_app_led_ctl(int enable, int color, int blinky)
 {
+    int value = (blinky)?0.5:0;
     //DBG("\n#mbed_app_led_ctl Enable %x, Color: %d - (R %d,G %d,B %d)\n",enable, color,(color&0x4)?1:0,(color&0x2)?1:0,(color&0x1)?1:0);
     if(enable)
     {
-        led_r = (color&0x4)?0:1;
-        led_g = (color&0x2)?0:1;
+        led_r = (color&0x4)?value:1;
+        led_g = (color&0x2)?value:1;
         led_b = (color&0x1)?0:1;
     }
     else
@@ -100,6 +101,16 @@ void mbed_app_led_ctl(int enable, int color)
         led_g = 1;
         led_b = 1;
     }
+}
+
+void mbed_app_speaker_ctl(int enable)
+{
+    speaker.period(2.0);
+
+    if(enable)
+        speaker = 1;
+    else
+        speaker = 0;
 }
 
 float mbed_app_get_temperature()
@@ -119,7 +130,6 @@ float mbed_app_get_voltage()
     // Simulate Votage value (0~250V)
     return (float)(pot2*50+200);
 }
-
 
 #ifdef DRIVER_TEST
 void mbed_app_driver_test()
